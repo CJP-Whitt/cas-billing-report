@@ -1,0 +1,24 @@
+<h1>Welcome to - CAS Billing Report</h1>
+
+<section class="queries">
+		<ul>
+			<li>
+				<form action="/query_test", method="post">
+					<button type="submit">Test me!</button>
+				</form>
+				{{# if testQuery}}
+					{{ testQuery }}
+				{{/if}}
+			</li>
+			<li>
+				<form action="/query_bd", method="post">
+					<button type="submit">Query BitDefender</button>
+				</form>
+				{{# if bdQuery}}
+					{{ bdQuery }}
+				{{/if}}
+			</li>
+			
+		</ul>
+</section>
+

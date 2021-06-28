@@ -1,0 +1,5 @@
+# Exclude secret information
+.env
+
+# Exclude modules
+./node_modules/*

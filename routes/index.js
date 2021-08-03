@@ -1,60 +1,49 @@
+var date = require('date-and-time');
 var express = require('express');
 var router = express.Router();
 var request = require('request');
-var fetch = require('node-fetch');
 var json = require('json');
+const { bdNetQuery } = require('../src/bd_queries');
+const { bdCsvCreate } = require('../src/csv_modifier');
 
+/* Session Variables */
+// bdQuery - Holds the bd query repsonse
+// bdCsv - Holds csv text data
+// dbgTxt - Holds the debug text
 
 /* GET home page. */
 router.get('/', (req, res, next) => {
-	res.render('index', { title: 'CAS Billing Report', bdQuery: req.session.bdQuery, testQuery: req.session.testQuery});
+	req.session.bdQuery = req.session.bdQuery ? req.session.bdQuery : null;
+	req.session.dbgTxt = req.session.dbgTxt ? req.session.dbgTxt : "";
 
-	req.session.bdQuery = null;
-	req.session.testQuery = null;
-});
-
-router.post('/query_test', (req, res) => {
-	console.log('Test btn clicked!')
-	req.session.testQuery = ['This', 'is', 'a', 'test'];
-
-	res.redirect('/');
-});
-
-router.post('/query_bd', (req, res) => {
-	console.log('BD Query btn clicked!')
-
-	let key64 = btoa(process.env.BD_API_KEY);
-	
-	let body = {
-		id: process.env.BD_QUERY_ID,
-		jsonrpc: "2.0",
-		method: "getAccountsList",
-		params: {
-			perPage: 20,
-			page: 1
-		}
-	}
-
-	// Api query request
-	fetch(process.env.BD_DOMAIN+'/v1.0/jsonrpc/accounts', {
-		method: "POST",
-		body: JSON.stringify(body),
-		headers: {
-			"Content-Type": "application/json",
-			"Authorization": "Basic " + key64
-		}
-	}).then(res => res.json())
-	.then(json => {
-		req.session.bdQuery = json;
-		console.log(req.session.bdQuery);
-		res.redirect('/');
-	})
-	.catch(err => {
-		req.session.bdQuery = json;
-		console.log(err);
-		res.redirect('/')
+	return res.render('index', {
+		title: 'CAS Billing Report', 
+		bdQuery: req.session.bdQuery,
+		dbgTxt: req.session.dbgTxt,
+		bdCsv: req.session.bdCsv
 	});
 
+});
+
+
+router.get('/bdQuery', (req, res) => {
+	bdNetQuery(req).then(data => {
+		console.log('BD Query action DONE!\n');
+		if (data){
+			req.session.bdQuery = data;
+			req.session.bdCsv = true;
+		}else {
+			req.session.bdQuery = null;
+		}
+		res.redirect('/');
+	});
+});
+
+router.get('/bdCsvDownload', (req, res) => {
+	let filename = 'BD Report ' + date.format(new Date(), 'MM-DD-YYYY') + '.csv';
+	req.session.bdCsv = bdCsvCreate(req.session.bdQuery);
+	res.set({'Content-Disposition': 'attachment; filename=' + filename,'Content-type': 'text/csv'});
+	return res.send(req.session.bdCsv);
 });
 
 module.exports = router;

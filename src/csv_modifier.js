@@ -8,10 +8,10 @@ function bdCsvCreate(clients){
     //      - clients(array): array of client report objects {name(string), managed_machines(int)}
     // - returns: csv text
 
-    let fields = ['Company name', 'Managed machines']
+    let fields = ['Company name', 'Managed machines', 'Endpoints']
 
     let content = fields.join(',') + '\n'
-    + clients.map(e => ['\"' + e.name + '\"',e.machines].join(',')).join('\n');
+            + clients.map(e => ['\"' + e.name + '\"',e.machines,e.endpoints].join(',')).join('\n');
     
     return content;
 }

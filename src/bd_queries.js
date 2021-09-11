@@ -51,6 +51,7 @@ async function getCompaniesGroupId(){
 	return json.result.items[0].id;
 }
 
+
 async function getManagedClientsList(companiesGroupId){	
 	// Gets managed members of Companies group
 	// - args:
@@ -59,14 +60,11 @@ async function getManagedClientsList(companiesGroupId){
 
 	let response = await bdNetworkFetchAssist("getNetworkInventoryItems", {parentId: companiesGroupId, perPage: 100});
 	if (!response.ok){
-		throw new error('getManagedClientsList:fetch --> error: ' + response.status);
+		throw new Error('getManagedClientsList:fetch --> error: ' + response.status);
 	}
 	let json = await response.json();
-	let mngdClients = json.result.items.filter(clnt => {
-		return !clnt.isSuspended;
-	});
-
-	mngdClients = mngdClients.map(clnt => ({id: clnt.id, name: clnt.name}))
+	let mngdClients = json.result.items.filter(clnt => { return !clnt.isSuspended; }); // Filter out suspended clients
+	mngdClients = mngdClients.map(clnt => ({id: clnt.id, name: clnt.name, companyId: clnt.companyId })); // Client group ids, and name objects
 
 	if (!mngdClients){ // Check for valid company id object
 		throw new Error('getManagedClientsList:post-fetch --> error: null managed clients list');
@@ -75,54 +73,85 @@ async function getManagedClientsList(companiesGroupId){
 	return mngdClients;
 }
 
+
 async function getClientReportList(clientsIdList){
 	// Gets report on clients and managed machines
 	// - args:
-	// 		- clientsIdList(array): json objects of client ids
+	// 		- clientsIdList(array): json client objects {id, name, companyId}
 	// - returns: array of client report objects {name(string), managed_machines(int)}
-	let clientReportList = []; // 
-	for (let i=0; i < clientsIdList.length; i++){
-		// Api query request
-		let response = await bdNetworkFetchAssist("getNetworkInventoryItems", {
-			parentId: clientsIdList[i].id, 
-			perPage: 100,
-			filters: {
-				type: {
-					computers: true,
-					virtualMachines: true
-				},
-				depth: {
-					allItemsRecursively: true
-				}
-			}
-		});
-		if (!response.ok){
-			throw new error('getClientReportList:fetch --> error: ' + response.status);
-		}
-		let json = await response.json();
-		let mngdMachineList = json.result.items.filter(clnt => {
-			return clnt.details.isManaged;
-		});
-		clientReportList.push( {name: clientsIdList[i].name, machines: mngdMachineList.length} );
-		//response = await bdNetworkFetchAssist("getManagedEndpointDetails", {endpointId: e.id});
+	let clientReportList = []
+	for (let i=0; i < clientsIdList.length; i++){ // Loop through clients
+
+		let validGrpIds = await getClientValidGroups(clientsIdList[i].id); // Valid group ids per client
+		console.log("CompanyId: " + clientsIdList[i].companyId);
 		
-		if (i == 0) {
-			for (let j=0; j<mngdMachineList.length; j++){
-				let subResponse = await bdNetworkFetchAssist("getManagedEndpointDetails", {endpointId: mngdMachineList[j].id});
+		let usageResponse = await bdLicenseFetchAssist("getMonthlyUsagePerProductType", {
+			companyId: clientsIdList[i].companyId,
+			targetMonth: '07/2021'
+		});
+		if (!usageResponse.ok){
+			throw new Error('getClientReportList:fetch --> error: ' + response.status);
+		}
+
+		let json = await usageResponse.json();
+		console.log(json.result);
+
+
+		for (let k=0; k < validGrpIds.length; k++){ // Loop through valid folders within client
+			let response = await bdNetworkFetchAssist("getEndpointsList", {
+				parentId: validGrpIds[k], 
+				perPage: 100
+			});
+			if (!response.ok){
+				throw new Error('getClientReportList:fetch --> error: ' + response.status);
+			}
+
+			let json = await response.json();
+			let mngdMachineList = json.result.items.filter(clnt => { return clnt.isManaged; }); // Get amount of managed machines per client
+
+			let endpointCount = 0; // Counter for machine endpoints
+			for (let j=0; j<mngdMachineList.length; j++){ // Loop through machines to add endpoints
+				let subResponse = await bdNetworkFetchAssist("getManagedEndpointDetails", { endpointId: mngdMachineList[j].id });
 				if (!subResponse.ok){
-					throw new error('getClientReportList:fetch --> error: ' + subResponse.status);
+					throw new Error('getClientReportList:fetch --> error: ' + subResponse.status);
 				}
 				let subJson = await subResponse.json();
-				console.log(subJson.result);
+				if (subJson.result.agent.licensed == 1) { endpointCount++; } // Add licensed endpoints
 			}
+
+			clientReportList.push( { name: clientsIdList[i].name, machines: mngdMachineList.length, endpoints: endpointCount });
+			// TODO! - Get enpoint validity and sandbox anlalyer valdity 
+			//response = await bdNetworkFetchAssist("getManagedEndpointDetails", {endpointId: e.id});
 		}
 	}
-
+	
 	if (!clientReportList){ // Check for valid company id object
 		throw new Error('getClientReportList:post-fetch --> error: null clients list');
 	}
 
 	return clientReportList;
+}
+
+async function getClientValidGroups(clientId){
+	// Gets valid groups in client folder (exclude delted, everything else is good)
+	// - args: 
+	// 		clientId(string): clients id to search for non-deleted folders
+	// - returns: array of valid group ids (string)
+	let validGroupIds = []
+	let response = await bdNetworkFetchAssist("getCustomGroupsList", { parentId: clientId });
+	if (!response.ok){
+		throw new Error('getClientValidGroups:fetch --> error: ' + response.status);
+	}
+
+	let json = await response.json();
+	let validGroupObjs = json.result.filter(group => { return group.name != 'Deleted'; });
+	validGroupObjs.forEach(group => { validGroupIds.push(group.id) });
+
+	if (!validGroupIds || !validGroupIds.length){ // Check for valid company id object
+		throw new Error('getClientValidGroups:post-fetch --> error: null or empty valid group id array');
+	}
+
+	return validGroupIds;
 }
 
 
@@ -143,6 +172,32 @@ async function bdNetworkFetchAssist(targetMethod, targetParams){
 
 	// Api query request
 	let response = await fetch(process.env.BD_DOMAIN+'/v1.0/jsonrpc/network', {
+		method: "POST",
+		body: JSON.stringify(body),
+		headers: {
+			"Content-Type": "application/json",
+			"Authorization": "Basic " + btoa(process.env.BD_API_KEY)
+		}
+	});
+
+	return response;
+}
+
+async function bdLicenseFetchAssist(targetMethod, targetParams){
+	// Perform api queries to BD using network domain
+	// - args: 
+	// 		targetMethod(string): bd query method to use
+	//		targetParams(obj): obj of bd query paramaters
+	// - returns: query response
+	let body = {
+		id: process.env.BD_QUERY_ID,
+		jsonrpc: "2.0",
+		method: targetMethod,
+		params: targetParams
+	};
+
+	// Api query request
+	let response = await fetch(process.env.BD_DOMAIN+'/v1.0/jsonrpc/licensing', {
 		method: "POST",
 		body: JSON.stringify(body),
 		headers: {

@@ -9,6 +9,7 @@ $(function(){
   });
 });
 </script>
+
 <section>
 	<div class="queries">
 		<table>
@@ -33,9 +34,24 @@ $(function(){
           <h3>BitDefender Response:</h3>
           <div class="response">
             {{#if bdQuery}}
-              {{#each bdQuery }}
-                &ensp;- {{name}}: {{machines}}
-              {{/each}}
+              <div class="responseTable">
+                <table>
+                  <tr>
+                    <th>Client</th>
+                    <th>Machines</th>
+                    <th>Endpoints</th>
+                    <th>Sandboxes</th>
+                  </tr>
+                  {{#each bdQuery}}
+                    <tr>
+                      <td>{{name}}</td>
+                      <td style="text-align: right;">{{machines}}</td>
+                      <td style="text-align: right;">{{endpoints}}</td>
+                      <td style="text-align: right;"></td>
+                    </tr>
+                  {{/each}}
+                </table>
+              </div>
             {{/if}}
           </div>
         </td>

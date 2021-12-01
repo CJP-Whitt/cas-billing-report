@@ -101,8 +101,10 @@ async function getClientReportList(clientsIdList){
 		}
 		
 
-
-		for (let k=0; k < validGrpIds.length; k++){ // Loop through valid folders within client
+		let mngdMachineList = []; // List of managed machines for client
+		let endpointCount = 0; // Counter for machine endpoints
+		
+		for (let k=0; k < validGrpIds.length; k++){ // Loop through valid folders within client, and add mnged machines to list
 			let response = await bdNetworkFetchAssist("getEndpointsList", {
 				parentId: validGrpIds[k], 
 				perPage: 100
@@ -112,22 +114,21 @@ async function getClientReportList(clientsIdList){
 			}
 
 			let json = await response.json();
-			let mngdMachineList = json.result.items.filter(clnt => { return clnt.isManaged; }); // Get amount of managed machines per client
+			mngdMachineList = mngdMachineList.concat(json.result.items.filter(clnt => { return clnt.isManaged; })); // Get amount of managed machines per client
+		}
 
-			let endpointCount = 0; // Counter for machine endpoints
-			for (let j=0; j<mngdMachineList.length; j++){ // Loop through machines to add endpoints
-				let subResponse = await bdNetworkFetchAssist("getManagedEndpointDetails", { endpointId: mngdMachineList[j].id });
-				if (!subResponse.ok){
-					throw new Error('getClientReportList:fetch --> error: ' + subResponse.status);
-				}
-				let subJson = await subResponse.json();
-				if (subJson.result.agent.licensed == 1) { endpointCount++; } // Add licensed endpoints
+		for (let j=0; j<mngdMachineList.length; j++){ // Loop through machines to add endpoints
+			let subResponse = await bdNetworkFetchAssist("getManagedEndpointDetails", { endpointId: mngdMachineList[j].id });
+			if (!subResponse.ok){
+				throw new Error('getClientReportList:fetch --> error: ' + subResponse.status);
 			}
-
-			clientReportList.push( { name: clientsIdList[i].name, machines: mngdMachineList.length, endpoints: endpointCount });
-			// TODO! - Get enpoint validity and sandbox anlalyer valdity 
+			let subJson = await subResponse.json();
+			if (subJson.result.agent.licensed == 1) { endpointCount++; } // Add licensed endpoints
+			// TODO! - Get enpoint validity and sandbox anlalyzer valdity 
 			//response = await bdNetworkFetchAssist("getManagedEndpointDetails", {endpointId: e.id});
 		}
+
+		clientReportList.push( { name: clientsIdList[i].name, machines: mngdMachineList.length, endpoints: endpointCount }); // Add client and info to list
 	}
 	
 	if (!clientReportList){ // Check for valid company id object

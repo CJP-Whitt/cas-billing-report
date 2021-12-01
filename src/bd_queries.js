@@ -56,7 +56,7 @@ async function getManagedClientsList(companiesGroupId){
 	// Gets managed members of Companies group
 	// - args:
 	//		- companiesGroupId(string): id for companies root tree parentId
-	// - returns: array of json client objects {id}
+	// - returns: array of json client objects {id, name}
 
 	let response = await bdNetworkFetchAssist("getNetworkInventoryItems", {parentId: companiesGroupId, perPage: 100});
 	if (!response.ok){
@@ -64,7 +64,7 @@ async function getManagedClientsList(companiesGroupId){
 	}
 	let json = await response.json();
 	let mngdClients = json.result.items.filter(clnt => { return !clnt.isSuspended; }); // Filter out suspended clients
-	mngdClients = mngdClients.map(clnt => ({id: clnt.id, name: clnt.name, companyId: clnt.companyId })); // Client group ids, and name objects
+	mngdClients = mngdClients.map(clnt => ({id: clnt.id, name: clnt.name})); // Client group ids, and name objects
 
 	if (!mngdClients){ // Check for valid company id object
 		throw new Error('getManagedClientsList:post-fetch --> error: null managed clients list');
@@ -77,13 +77,12 @@ async function getManagedClientsList(companiesGroupId){
 async function getClientReportList(clientsIdList){
 	// Gets report on clients and managed machines
 	// - args:
-	// 		- clientsIdList(array): json client objects {id, name, companyId}
+	// 		- clientsIdList(array): json client objects {id, name}
 	// - returns: array of client report objects {name(string), managed_machines(int)}
 	let clientReportList = []
 	for (let i=0; i < clientsIdList.length; i++){ // Loop through clients
 
 		let validGrpIds = await getClientValidGroups(clientsIdList[i].id); // Valid group ids per client
-		if (process.env.VERBOSE_MODE) {console.log("CompanyId: " + clientsIdList[i].companyId);}
 		
 		let usageResponse = await bdLicenseFetchAssist("getMonthlyUsagePerProductType", {
 			companyId: clientsIdList[i].companyId,
@@ -94,7 +93,13 @@ async function getClientReportList(clientsIdList){
 		}
 
 		let json = await usageResponse.json();
-		console.log(json.result);
+		if (process.env.VERBOSE_MODE) {
+			console.log("Client Name: " + clientsIdList[i].name + "\n" +
+						"ValidGrps: " + validGrpIds
+				);
+			console.log(json.result);
+		}
+		
 
 
 		for (let k=0; k < validGrpIds.length; k++){ // Loop through valid folders within client
@@ -134,6 +139,7 @@ async function getClientReportList(clientsIdList){
 
 async function getClientValidGroups(clientId){
 	// Gets valid groups in client folder (exclude deleted, everything else is good)
+	// Recursivly look through valid groups for more groups
 	// - args: 
 	// 		clientId(string): clients id to search for non-deleted folders
 	// - returns: array of valid group ids (string)
@@ -147,9 +153,17 @@ async function getClientValidGroups(clientId){
 	let validGroupObjs = json.result.filter(group => { return group.name != 'Deleted'; });
 	validGroupObjs.forEach(group => { validGroupIds.push(group.id) });
 
-	if (!validGroupIds || !validGroupIds.length){ // Check for valid company id object
+	if (!validGroupIds){ // Check for valid company id object
 		throw new Error('getClientValidGroups:post-fetch --> error: null or empty valid group id array');
 	}
+
+	if (validGroupIds.length > 0){ // Recursivly collect all valid groups
+		for(let i=0; i < validGroupIds.length; i++){
+			let moreValidGroupIds = await getClientValidGroups(validGroupIds[i]);
+			validGroupIds = validGroupIds.concat(moreValidGroupIds);
+		}
+	}
+
 
 	return validGroupIds;
 }

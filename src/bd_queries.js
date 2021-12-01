@@ -83,11 +83,11 @@ async function getClientReportList(clientsIdList){
 	for (let i=0; i < clientsIdList.length; i++){ // Loop through clients
 
 		let validGrpIds = await getClientValidGroups(clientsIdList[i].id); // Valid group ids per client
-		console.log("CompanyId: " + clientsIdList[i].companyId);
+		if (process.env.VERBOSE_MODE) {console.log("CompanyId: " + clientsIdList[i].companyId);}
 		
 		let usageResponse = await bdLicenseFetchAssist("getMonthlyUsagePerProductType", {
 			companyId: clientsIdList[i].companyId,
-			targetMonth: '07/2021'
+			targetMonth: getLastPeriodDate()
 		});
 		if (!usageResponse.ok){
 			throw new Error('getClientReportList:fetch --> error: ' + response.status);
@@ -133,7 +133,7 @@ async function getClientReportList(clientsIdList){
 }
 
 async function getClientValidGroups(clientId){
-	// Gets valid groups in client folder (exclude delted, everything else is good)
+	// Gets valid groups in client folder (exclude deleted, everything else is good)
 	// - args: 
 	// 		clientId(string): clients id to search for non-deleted folders
 	// - returns: array of valid group ids (string)
@@ -176,7 +176,7 @@ async function bdNetworkFetchAssist(targetMethod, targetParams){
 		body: JSON.stringify(body),
 		headers: {
 			"Content-Type": "application/json",
-			"Authorization": "Basic " + btoa(process.env.BD_API_KEY)
+			"Authorization": "Basic " + Buffer.from(process.env.BD_API_KEY).toString('base64')
 		}
 	});
 
@@ -202,13 +202,32 @@ async function bdLicenseFetchAssist(targetMethod, targetParams){
 		body: JSON.stringify(body),
 		headers: {
 			"Content-Type": "application/json",
-			"Authorization": "Basic " + btoa(process.env.BD_API_KEY)
+			"Authorization": "Basic " + Buffer.from(process.env.BD_API_KEY).toString('base64')
 		}
 	});
 
 	return response;
 }
 
+function getLastPeriodDate(){
+	// Get last months date fromatted as MM/YYYY
+	// - args: N/A
+	// - returns: string of date (MM/YYYY)
+	var today = new Date();
+	var month = today.getMonth() + 1;
+	var year = today.getFullYear();
+
+	// Offset month back once, change to MM format
+	if(month == 1){
+		month = 12;
+	}else if(month < 11) {
+		month = '0' + (month - 1)
+	}else {
+		month = month - 1;
+	}
+
+	return month + '/' + year;
+}
 
 
 module.exports = { bdNetQuery: bdNetQuery};
